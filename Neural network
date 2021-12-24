@@ -1,0 +1,71 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import tensorflow as tf
+import datetime
+
+#Importacion de datos
+df = pd.read_excel('./Borrador.xlsx', sheet_name='Borrador')
+df.info()
+df.head(6)
+
+df = df.drop(['C','Ciclo','Ciclo','Promedio Presion Aire secado','Std Presion Aire secado','Std Flujo aire secado',
+              'Tiempo total ciclo','Tiempo total prensado','Tiempo total secado',
+              'Promedio Flujo aire secado','Std Presion membrana aire','Tiempo diferencia 0.75% alim',
+              'Tiempo diferencia 1.00% alim'],axis=1) #Variables a eliminar.
+df.head()   #Ver df
+
+###Division Train / Test
+X = df.drop('Peso secado',axis=1)  #Variables de entrada, menos la variable de salida
+Y = df['Peso secado']    
+
+###Escalado 
+from sklearn.preprocessing import MinMaxScaler
+scaler = MinMaxScaler()
+X= scaler.fit_transform(X)
+
+###Creacion del modelo###
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Activation
+from tensorflow.keras.optimizers import Adam
+import tensorflow as tf
+from sklearn.model_selection import KFold
+
+# Define per-fold score containers
+acc_per_fold = []
+loss_per_fold = []
+
+def create_model():  
+    model = tf.keras.models.Sequential()
+    model.add(tf.keras.layers.Dense(6, input_shape=(6,) , activation = 'sigmoid'))
+    model.add(tf.keras.layers.Dense(50, activation = 'relu'))
+    model.add(tf.keras.layers.Dense(1, activation = 'linear'))
+
+    model.summary()
+    model.compile(optimizer='adam',loss='mse', metrics=['accuracy'])
+    return model
+
+n_split=10
+num_folds=10
+# Define the K-fold Cross Validator
+kfold = KFold(n_splits=num_folds, shuffle=True)
+#K-fold Cross Validation model evaluation
+fold_no = 1
+for train_index,test_index in KFold(n_split).split(X):
+  x_train,x_test=X[train_index],X[test_index]
+  y_train,y_test=Y[train_index],Y[test_index]
+  
+  model=create_model()
+  model.fit(x_train, y_train,epochs=100)
+  # Fit data to model
+  history = model.fit(x_train, y_train,epochs=100, batch_size=10)
+  print('Model evaluation ',model.evaluate(x_test,y_test))
+  # Generate generalization metrics
+  scores = model.evaluate(x_test, y_test, verbose=0)
+  print(f'Score for fold {fold_no}: {model.metrics_names[0]} of {scores[0]}; {model.metrics_names[1]} of {scores[1]*100}%')
+  acc_per_fold.append(scores[1] * 100)
+  loss_per_fold.append(scores[0])
+  # Increase fold number
+  fold_no = fold_no + 1
+
